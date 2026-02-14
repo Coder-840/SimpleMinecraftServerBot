@@ -5,7 +5,7 @@ const CONFIG = {
     port: 25565,
     botCount: 5,
     password: 'SafeBot123!',
-    spamInterval: 1000,
+    spamInterval: 2000,
     minJoinDelay: 1000,
     maxJoinDelay: 35000
 };
