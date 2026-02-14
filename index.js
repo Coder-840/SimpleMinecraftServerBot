@@ -17,11 +17,25 @@ let scrapedProxies = [];
 async function refreshProxies() {
     try {
         console.log("Fetching fresh 'Warp' points...");
-        const res = await axios.get(CONFIG.proxyApi);
-        scrapedProxies = res.data.trim().split('\n').map(p => p.trim()).filter(p => p.includes(':'));
-        console.log(`Scraped ${scrapedProxies.length} proxies.`);
+        const res = await axios.get(CONFIG.proxyApi, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
+        
+        // Split by lines and remove any empty results or carriage returns
+        scrapedProxies = res.data.toString().replace(/\r/g, '').split('\n').filter(p => p.includes(':'));
+        
+        if (scrapedProxies.length === 0) {
+            console.log("API returned blank. Retrying with backup URL...");
+            // Backup URL if the first one fails
+            const backupRes = await axios.get('https://api.proxyscrape.com');
+            scrapedProxies = backupRes.data.toString().replace(/\r/g, '').split('\n').filter(p => p.includes(':'));
+        }
+        
+        console.log(`Successfully scraped ${scrapedProxies.length} proxies.`);
     } catch (e) {
-        console.log("Failed to fetch proxies. Check your internet.");
+        console.log(`Failed to fetch proxies: ${e.message}`);
     }
 }
 
