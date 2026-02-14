@@ -1,25 +1,24 @@
 const mineflayer = require('mineflayer');
 
-// === CONFIGURATION ===
 const CONFIG = {
     host: 'noBnoT.org', 
     port: 25565,
     botCount: 5,
     password: 'SafeBot123!',
-    spamInterval: 2500,    // 8 seconds between chat messages
-    minJoinDelay: 1000,    // 1 second
-    maxJoinDelay: 30000    // 30 seconds
+    spamInterval: 2500,
+    minJoinDelay: 1000,
+    maxJoinDelay: 30000
 };
 
-let botsJoined = 0;
+const activeBots = new Set();
 
 function randomStr(len) {
     return Math.random().toString(36).substring(2, 2 + len).toUpperCase();
 }
 
-function createBot(id) {
-    const name = `User_${randomStr(5)}`;
-    console.log(`[Queue] Launching ${name} (Bot #${id + 1})...`);
+function createBot(id, existingName = null) {
+    const name = existingName || `User_${randomStr(5)}`;
+    console.log(`[Queue] Launching ${name}...`);
 
     const bot = mineflayer.createBot({
         host: CONFIG.host,
@@ -28,7 +27,6 @@ function createBot(id) {
         version: '1.8.8'
     });
 
-    // Auto-Login/Register
     bot.on('message', (jsonMsg) => {
         const msg = jsonMsg.toString().toLowerCase();
         if (msg.includes("/register")) bot.chat(`/register ${CONFIG.password} ${CONFIG.password}`);
@@ -36,44 +34,49 @@ function createBot(id) {
     });
 
     bot.on('spawn', () => {
-        console.log(`>>> ${name} joined.`);
+        console.log(`>>> ${name} IS IN.`);
+        activeBots.add(name);
         
-        // Anti-AFK: Jump occasionally
+        // Anti-AFK Jump
         setInterval(() => {
-            if (bot.entity) bot.setControlState('jump', true);
-            setTimeout(() => { if (bot.entity) bot.setControlState('jump', false); }, 500);
+            if (bot.entity) {
+                bot.setControlState('jump', true);
+                setTimeout(() => { if (bot.entity) bot.setControlState('jump', false); }, 500);
+            }
         }, 15000);
 
-        // Spamming loop
+        // Individual Chat Loop
         setInterval(() => {
-            if (bot.entity) bot.chat(randomStr(8));
+            if (bot.entity && activeBots.has(name)) {
+                bot.chat(randomStr(8));
+            }
         }, CONFIG.spamInterval);
     });
 
     bot.on('kicked', (reason) => {
-        console.log(`[!] ${name} kicked: ${reason}`);
-        // Wait 45s before replacing a kicked bot to protect IP
-        setTimeout(() => createBot(id), 45000); 
+        const kickMsg = reason.toString();
+        console.log(`[!] ${name} kicked.`);
+
+        // THE BYPASS: If the server is "analyzing", rejoin IMMEDIATELY with the same name
+        if (kickMsg.includes("analyzing") || kickMsg.includes("immediately")) {
+            console.log(`[Bypass] Rejoining ${name} for verification...`);
+            setTimeout(() => createBot(id, name), 1000); 
+        } else {
+            activeBots.delete(name);
+            // If it's a normal kick, wait a bit before starting a new bot slot
+            setTimeout(() => createBot(id), 45000);
+        }
     });
 
-    bot.on('error', (err) => console.log(`[Error] ${name}: ${err.code}`));
+    bot.on('error', () => {});
 }
 
-// --- RANDOMIZED SEQUENTIAL JOINER ---
 function startQueue(currentId) {
     if (currentId >= CONFIG.botCount) return;
-
     createBot(currentId);
-
-    // Pick a random delay between 1 and 30 seconds for the NEXT bot
     const nextDelay = Math.floor(Math.random() * (CONFIG.maxJoinDelay - CONFIG.minJoinDelay + 1)) + CONFIG.minJoinDelay;
-    
-    console.log(`[Queue] Next bot in ${Math.round(nextDelay/1000)}s...`);
-    
-    setTimeout(() => {
-        startQueue(currentId + 1);
-    }, nextDelay);
+    console.log(`[Queue] Bot #${currentId + 2} scheduled in ${Math.round(nextDelay/1000)}s.`);
+    setTimeout(() => startQueue(currentId + 1), nextDelay);
 }
 
-// Kick off the first bot
 startQueue(0);
