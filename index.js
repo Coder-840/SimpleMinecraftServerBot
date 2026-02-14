@@ -6,16 +6,19 @@ const CONFIG = {
     botCount: 5,
     password: 'SafeBot123!',
     spamInterval: 1000,
-    reconnectDelay: 35000 // 35s to clear Minecraft/Bungee IP-rate limits
+    minJoinDelay: 1000,
+    maxJoinDelay: 35000
 };
+
+const activeBots = new Set();
 
 function randomStr(len) {
     return Math.random().toString(36).substring(2, 2 + len).toUpperCase();
 }
 
-function spawnBot(id, botName = null) {
-    const name = botName || `User_${randomStr(5)}`;
-    console.log(`[Bot ${id + 1}] Initializing ${name}...`);
+function createBot(id, existingName = null) {
+    const name = existingName || `User_${randomStr(5)}`;
+    console.log(`[Queue] Launching ${name}...`);
 
     const bot = mineflayer.createBot({
         host: CONFIG.host,
@@ -24,51 +27,56 @@ function spawnBot(id, botName = null) {
         version: '1.8.8'
     });
 
-    // --- BINDING EVENTS TO THE NEW INSTANCE ---
     bot.on('message', (jsonMsg) => {
         const msg = jsonMsg.toString().toLowerCase();
         if (msg.includes("/register")) bot.chat(`/register ${CONFIG.password} ${CONFIG.password}`);
         if (msg.includes("/login")) bot.chat(`/login ${CONFIG.password}`);
     });
 
-    bot.once('spawn', () => {
-        console.log(`>>> ${name} joined and verified.`);
+    bot.on('spawn', () => {
+        console.log(`>>> ${name} IS IN.`);
+        activeBots.add(name);
         
-        // Anti-AFK & Spam Loops
-        const chatInterval = setInterval(() => {
-            if (bot.entity) bot.chat(randomStr(8));
-            else clearInterval(chatInterval); // Stop if bot is gone
+        // Anti-AFK Jump
+        setInterval(() => {
+            if (bot.entity) {
+                bot.setControlState('jump', true);
+                setTimeout(() => { if (bot.entity) bot.setControlState('jump', false); }, 500);
+            }
+        }, 15000);
+
+        // Individual Chat Loop
+        setInterval(() => {
+            if (bot.entity && activeBots.has(name)) {
+                bot.chat(randomStr(8));
+            }
         }, CONFIG.spamInterval);
     });
 
-    // --- RECONNECT LOGIC: MUST RE-BIND ON EVERY KICK ---
     bot.on('kicked', (reason) => {
         const kickMsg = reason.toString();
-        console.log(`[!] ${name} kicked. Reason: ${kickMsg.substring(0, 50)}...`);
+        console.log(`[!] ${name} kicked.`);
 
-        // Destroy old instance properly
-        bot.end();
-
-        // Limbo Bypass: Rejoin immediately with same name
+        // THE BYPASS: If the server is "analyzing", rejoin IMMEDIATELY with the same name
         if (kickMsg.includes("analyzing") || kickMsg.includes("immediately")) {
-            console.log(`[Bypass] Instant rejoin for ${name}`);
-            setTimeout(() => spawnBot(id, name), 2000);
+            console.log(`[Bypass] Rejoining ${name} for verification...`);
+            setTimeout(() => createBot(id, name), 1000); 
         } else {
-            // Standard Kick: Wait 35s to avoid Mojang/Server relog lock
-            console.log(`[Waiting] ${name} cooling down for ${CONFIG.reconnectDelay/1000}s`);
-            setTimeout(() => spawnBot(id), CONFIG.reconnectDelay);
+            activeBots.delete(name);
+            // If it's a normal kick, wait a bit before starting a new bot slot
+            setTimeout(() => createBot(id), 45000);
         }
     });
 
-    bot.on('error', (err) => {
-        console.log(`[Error] ${name}: ${err.code}`);
-        bot.end();
-        setTimeout(() => spawnBot(id), CONFIG.reconnectDelay);
-    });
+    bot.on('error', () => {});
 }
 
-// --- SEQUENTIAL START ---
-// Spreads out the initial joins so the IP doesn't get flagged immediately
-for (let i = 0; i < CONFIG.botCount; i++) {
-    setTimeout(() => spawnBot(i), i * 30000);
+function startQueue(currentId) {
+    if (currentId >= CONFIG.botCount) return;
+    createBot(currentId);
+    const nextDelay = Math.floor(Math.random() * (CONFIG.maxJoinDelay - CONFIG.minJoinDelay + 1)) + CONFIG.minJoinDelay;
+    console.log(`[Queue] Bot #${currentId + 2} scheduled in ${Math.round(nextDelay/1000)}s.`);
+    setTimeout(() => startQueue(currentId + 1), nextDelay);
 }
+
+startQueue(0);
