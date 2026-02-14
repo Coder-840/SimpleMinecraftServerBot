@@ -1,53 +1,31 @@
 const mineflayer = require('mineflayer');
 const { SocksClient } = require('socks');
-const axios = require('axios');
 
 const CONFIG = {
     host: 'noBnoT.org', 
     port: 25565,
     botCount: 10,
     password: 'SafeBot123!',
-    proxyApi: 'https://api.proxyscrape.com',
-    joinDelay: 8000, 
-    verifyDelay: 6000
+    joinDelay: 10000, 
+    verifyDelay: 6000,
+    // Freshly gathered public SOCKS5 list
+    proxies: [
+        "184.178.172.18:15280", "167.103.111.41:43615", "104.129.199.70:10230",
+        "103.126.87.112:1285", "117.7.201.8:5657", "202.162.219.12:1080",
+        "45.61.121.191:6790", "172.104.56.209:9050", "197.234.13.24:4145",
+        "103.195.141.47:1080", "109.194.17.214:3629", "185.87.121.5:8975",
+        "5.75.198.16:1080", "93.187.188.30:1080", "181.66.37.143:4153",
+        "191.96.117.213:6968", "192.111.137.34:18765", "64.64.115.234:5869",
+        "142.147.240.117:6639", "66.29.128.244:23597", "103.191.196.71:8199"
+    ]
 };
 
-let scrapedProxies = [];
-
-async function refreshProxies() {
-    try {
-        console.log("Fetching fresh 'Warp' points...");
-        const res = await axios.get(CONFIG.proxyApi, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-        });
-        
-        // Split by lines and remove any empty results or carriage returns
-        scrapedProxies = res.data.toString().replace(/\r/g, '').split('\n').filter(p => p.includes(':'));
-        
-        if (scrapedProxies.length === 0) {
-            console.log("API returned blank. Retrying with backup URL...");
-            // Backup URL if the first one fails
-            const backupRes = await axios.get('https://api.proxyscrape.com');
-            scrapedProxies = backupRes.data.toString().replace(/\r/g, '').split('\n').filter(p => p.includes(':'));
-        }
-        
-        console.log(`Successfully scraped ${scrapedProxies.length} proxies.`);
-    } catch (e) {
-        console.log(`Failed to fetch proxies: ${e.message}`);
-    }
-}
-
 function createBot(id, botName = null) {
-    if (scrapedProxies.length === 0) {
-        console.log("No proxies available. Retrying fetch...");
-        return setTimeout(() => createBot(id, botName), 10000);
-    }
-
-    const name = botName || `WARP_${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
-    const proxyStr = scrapedProxies[Math.floor(Math.random() * scrapedProxies.length)];
+    const name = botName || `WARP_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const proxyStr = CONFIG.proxies[Math.floor(Math.random() * CONFIG.proxies.length)];
     const [pHost, pPort] = proxyStr.split(':');
+
+    console.log(`[Bot ${id + 1}] Warping via ${proxyStr}...`);
 
     const bot = mineflayer.createBot({
         host: CONFIG.host,
@@ -59,11 +37,11 @@ function createBot(id, botName = null) {
                 proxy: { host: pHost, port: parseInt(pPort), type: 5 },
                 command: 'connect',
                 destination: { host: CONFIG.host, port: CONFIG.port },
-                timeout: 10000 // Stop hanging on slow proxies
+                timeout: 8000 
             }, (err, info) => {
                 if (err) {
-                    // FIX: Wait 2 seconds before retrying to prevent stack overflow
-                    return setTimeout(() => createBot(id, botName), 2000); 
+                    // Try a different proxy immediately if this one is dead
+                    return setTimeout(() => createBot(id, botName), 1000); 
                 }
                 client.setSocket(info.socket);
                 client.emit('connect');
@@ -80,7 +58,10 @@ function createBot(id, botName = null) {
     bot.once('spawn', () => {
         console.log(`>>> ${name} PASSED SHIELD.`);
         setInterval(() => {
-            if (bot.entity) bot.chat(Math.random().toString(36).substring(2, 8).toUpperCase());
+            if (bot.entity) {
+                const hex = Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase();
+                bot.chat(hex);
+            }
         }, 8000);
     });
 
@@ -90,20 +71,18 @@ function createBot(id, botName = null) {
             console.log(`[Shield] ${name} verifying...`);
             setTimeout(() => createBot(id, name), CONFIG.verifyDelay);
         } else {
-            console.log(`[Kicked] ${name}. Re-warping in 15s...`);
+            console.log(`[Kicked] ${name}. Retrying slot...`);
             setTimeout(() => createBot(id), 15000);
         }
     });
 
-    // Handle errors so the bot doesn't just die
     bot.on('error', (err) => {
         bot.end();
-        setTimeout(() => createBot(id, botName), 5000);
+        setTimeout(() => createBot(id, botName), 2000);
     });
 }
 
-refreshProxies().then(() => {
-    for (let i = 0; i < CONFIG.botCount; i++) {
-        setTimeout(() => createBot(i), i * CONFIG.joinDelay);
-    }
-});
+// Kick off the slots
+for (let i = 0; i < CONFIG.botCount; i++) {
+    setTimeout(() => createBot(i), i * CONFIG.joinDelay);
+}
