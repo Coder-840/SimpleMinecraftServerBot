@@ -2,7 +2,7 @@ const mineflayer = require('mineflayer');
 
 const HOST = 'noBnoT.org'; // Keep the quotes!
 const PORT = parseInt(process.env.SERVER_PORT) || 25565;
-const MAX_BOTS = parseInt(process.env.BOT_COUNT) || 5;
+const MAX_BOTS = parseInt(process.env.BOT_COUNT) || 3;
 const PASSWORD = process.env.BOT_PASSWORD || "EaglerBot123!";
 
 // INCREASED DELAYS to bypass "Logging in too fast"
