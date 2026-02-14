@@ -6,8 +6,8 @@ const MAX_BOTS = parseInt(process.env.BOT_COUNT) || 3;
 const PASSWORD = process.env.BOT_PASSWORD || "EaglerBot123!";
 
 // INCREASED DELAYS to bypass "Logging in too fast"
-const JOIN_DELAY = 15000; // 15 seconds between bots
-const RECONNECT_DELAY = 20000; // 20 seconds after a kick
+const JOIN_DELAY = 5000; // 15 seconds between bots
+const RECONNECT_DELAY = 5000; // 20 seconds after a kick
 
 let activeBots = [];
 
@@ -61,7 +61,7 @@ function createBot(id, customName = null) {
 function startGlobalBroadcast() {
     setInterval(() => {
         activeBots.forEach(bot => bot.chat(`[${randomStr(6).toUpperCase()}]`));
-    }, 5000);
+    }, 2500);
 }
 
 // Start very slowly
