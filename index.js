@@ -1,38 +1,37 @@
 const mineflayer = require('mineflayer');
 const { SocksClient } = require('socks');
-const axios = require('axios'); // Add "axios": "^1.6.0" to package.json
+const axios = require('axios');
 
 const CONFIG = {
-    host: 'noBnoT.org',
+    host: 'noBnoT.org', 
     port: 25565,
-    botCount: 10, // NOW WE CAN GO TO 10!
+    botCount: 10,
     password: 'SafeBot123!',
-    // This API pulls fresh proxies so you don't have to provide them
-    proxyApi: 'https://api.proxyscrape.com'
+    // API to get fresh SOCKS5 proxies automatically
+    proxyApi: 'https://api.proxyscrape.com',
+    joinDelay: 8000, 
+    verifyDelay: 6000
 };
 
-let proxyList = [];
+let scrapedProxies = [];
 
-async function getFreshProxies() {
+async function refreshProxies() {
     try {
         console.log("Warping IPs... Fetching fresh proxy list.");
         const res = await axios.get(CONFIG.proxyApi);
-        proxyList = res.data.trim().split('\n').map(p => p.trim());
-        console.log(`Found ${proxyList.length} potential 'Warp' points.`);
+        scrapedProxies = res.data.trim().split('\n').map(p => p.trim());
+        console.log(`Successfully scraped ${scrapedProxies.length} proxies.`);
     } catch (e) {
-        console.log("Failed to fetch proxies. Check your internet connection.");
+        console.log("Error: Could not reach the proxy API.");
     }
 }
 
-function createBot(id) {
-    // Pick a random proxy from our freshly scraped list
-    const proxyStr = proxyList[Math.floor(Math.random() * proxyList.length)];
-    if (!proxyStr) return setTimeout(() => createBot(id), 5000);
+function createBot(id, botName = null) {
+    if (scrapedProxies.length === 0) return;
 
+    const name = botName || `WARP_${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
+    const proxyStr = scrapedProxies[Math.floor(Math.random() * scrapedProxies.length)];
     const [pHost, pPort] = proxyStr.split(':');
-    const name = `Warped_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-
-    console.log(`[Bot ${id + 1}] Warping via ${proxyStr}...`);
 
     const bot = mineflayer.createBot({
         host: CONFIG.host,
@@ -46,8 +45,8 @@ function createBot(id) {
                 destination: { host: CONFIG.host, port: CONFIG.port }
             }, (err, info) => {
                 if (err) {
-                    // If the proxy is dead (common with free lists), try a different one
-                    return createBot(id); 
+                    // If a proxy fails (common with free ones), just pick another and try again
+                    return createBot(id, botName); 
                 }
                 client.setSocket(info.socket);
                 client.emit('connect');
@@ -55,24 +54,35 @@ function createBot(id) {
         }
     });
 
-    bot.on('spawn', () => {
-        console.log(`>>> ${name} Successfully Warped through IP ${pHost}`);
+    bot.on('message', (json) => {
+        const msg = json.toString().toLowerCase();
+        if (msg.includes("/register")) bot.chat(`/register ${CONFIG.password} ${CONFIG.password}`);
+        if (msg.includes("/login")) bot.chat(`/login ${CONFIG.password}`);
+    });
+
+    bot.once('spawn', () => {
+        console.log(`>>> ${name} PASSED SHIELD VIA WARP.`);
         setInterval(() => {
             if (bot.entity) bot.chat(Math.random().toString(36).substring(2, 8).toUpperCase());
-        }, 5000);
+        }, 8000);
     });
 
     bot.on('kicked', (reason) => {
-        console.log(`[!] ${name} lost connection. Re-warping...`);
-        setTimeout(() => createBot(id), 10000);
+        const kickMsg = reason.toString();
+        if (kickMsg.includes("verified") || kickMsg.includes("re-connect") || kickMsg.includes("analyzing")) {
+            console.log(`[Shield] ${name} verifying...`);
+            setTimeout(() => createBot(id, name), CONFIG.verifyDelay);
+        } else {
+            setTimeout(() => createBot(id), 30000);
+        }
     });
 
     bot.on('error', () => {});
 }
 
-// Start the process
-getFreshProxies().then(() => {
+// Start sequence: Scrape first, then deploy
+refreshProxies().then(() => {
     for (let i = 0; i < CONFIG.botCount; i++) {
-        setTimeout(() => createBot(i), i * 5000);
+        setTimeout(() => createBot(i), i * CONFIG.joinDelay);
     }
 });
