@@ -5,20 +5,17 @@ const CONFIG = {
     port: 25565,
     botCount: 5,
     password: 'SafeBot123!',
-    spamInterval: 2500,
-    minJoinDelay: 1000,
-    maxJoinDelay: 30000
+    spamInterval: 1000,
+    reconnectDelay: 35000 // 35s to clear Minecraft/Bungee IP-rate limits
 };
-
-const activeBots = new Set();
 
 function randomStr(len) {
     return Math.random().toString(36).substring(2, 2 + len).toUpperCase();
 }
 
-function createBot(id, existingName = null) {
-    const name = existingName || `User_${randomStr(5)}`;
-    console.log(`[Queue] Launching ${name}...`);
+function spawnBot(id, botName = null) {
+    const name = botName || `User_${randomStr(5)}`;
+    console.log(`[Bot ${id + 1}] Initializing ${name}...`);
 
     const bot = mineflayer.createBot({
         host: CONFIG.host,
@@ -27,56 +24,51 @@ function createBot(id, existingName = null) {
         version: '1.8.8'
     });
 
+    // --- BINDING EVENTS TO THE NEW INSTANCE ---
     bot.on('message', (jsonMsg) => {
         const msg = jsonMsg.toString().toLowerCase();
         if (msg.includes("/register")) bot.chat(`/register ${CONFIG.password} ${CONFIG.password}`);
         if (msg.includes("/login")) bot.chat(`/login ${CONFIG.password}`);
     });
 
-    bot.on('spawn', () => {
-        console.log(`>>> ${name} IS IN.`);
-        activeBots.add(name);
+    bot.once('spawn', () => {
+        console.log(`>>> ${name} joined and verified.`);
         
-        // Anti-AFK Jump
-        setInterval(() => {
-            if (bot.entity) {
-                bot.setControlState('jump', true);
-                setTimeout(() => { if (bot.entity) bot.setControlState('jump', false); }, 500);
-            }
-        }, 15000);
-
-        // Individual Chat Loop
-        setInterval(() => {
-            if (bot.entity && activeBots.has(name)) {
-                bot.chat(randomStr(8));
-            }
+        // Anti-AFK & Spam Loops
+        const chatInterval = setInterval(() => {
+            if (bot.entity) bot.chat(randomStr(8));
+            else clearInterval(chatInterval); // Stop if bot is gone
         }, CONFIG.spamInterval);
     });
 
+    // --- RECONNECT LOGIC: MUST RE-BIND ON EVERY KICK ---
     bot.on('kicked', (reason) => {
         const kickMsg = reason.toString();
-        console.log(`[!] ${name} kicked.`);
+        console.log(`[!] ${name} kicked. Reason: ${kickMsg.substring(0, 50)}...`);
 
-        // THE BYPASS: If the server is "analyzing", rejoin IMMEDIATELY with the same name
+        // Destroy old instance properly
+        bot.end();
+
+        // Limbo Bypass: Rejoin immediately with same name
         if (kickMsg.includes("analyzing") || kickMsg.includes("immediately")) {
-            console.log(`[Bypass] Rejoining ${name} for verification...`);
-            setTimeout(() => createBot(id, name), 1000); 
+            console.log(`[Bypass] Instant rejoin for ${name}`);
+            setTimeout(() => spawnBot(id, name), 2000);
         } else {
-            activeBots.delete(name);
-            // If it's a normal kick, wait a bit before starting a new bot slot
-            setTimeout(() => createBot(id), 45000);
+            // Standard Kick: Wait 35s to avoid Mojang/Server relog lock
+            console.log(`[Waiting] ${name} cooling down for ${CONFIG.reconnectDelay/1000}s`);
+            setTimeout(() => spawnBot(id), CONFIG.reconnectDelay);
         }
     });
 
-    bot.on('error', () => {});
+    bot.on('error', (err) => {
+        console.log(`[Error] ${name}: ${err.code}`);
+        bot.end();
+        setTimeout(() => spawnBot(id), CONFIG.reconnectDelay);
+    });
 }
 
-function startQueue(currentId) {
-    if (currentId >= CONFIG.botCount) return;
-    createBot(currentId);
-    const nextDelay = Math.floor(Math.random() * (CONFIG.maxJoinDelay - CONFIG.minJoinDelay + 1)) + CONFIG.minJoinDelay;
-    console.log(`[Queue] Bot #${currentId + 2} scheduled in ${Math.round(nextDelay/1000)}s.`);
-    setTimeout(() => startQueue(currentId + 1), nextDelay);
+// --- SEQUENTIAL START ---
+// Spreads out the initial joins so the IP doesn't get flagged immediately
+for (let i = 0; i < CONFIG.botCount; i++) {
+    setTimeout(() => spawnBot(i), i * 30000);
 }
-
-startQueue(0);
