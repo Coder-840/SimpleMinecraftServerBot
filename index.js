@@ -1,82 +1,58 @@
 const mineflayer = require('mineflayer');
 
 const CONFIG = {
-    host: 'noBnoT.org', 
+    host: 'noBnoT.org',
     port: 25565,
-    botCount: 5,
-    password: 'SafeBot123!',
-    spamInterval: 2000,
-    minJoinDelay: 1000,
-    maxJoinDelay: 35000
+    botCount: 10,
+    password: 'FastPass123!',
+    joinDelay: 1500, // 1.5 seconds (The "Sweet Spot" for BungeeCord)
+    spamInterval: 3000
 };
 
-const activeBots = new Set();
-
-function randomStr(len) {
-    return Math.random().toString(36).substring(2, 2 + len).toUpperCase();
-}
-
-function createBot(id, existingName = null) {
-    const name = existingName || `User_${randomStr(5)}`;
-    console.log(`[Queue] Launching ${name}...`);
-
+function createBot(id) {
+    const name = `User_${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
+    
     const bot = mineflayer.createBot({
         host: CONFIG.host,
         port: CONFIG.port,
         username: name,
-        version: '1.8.8'
+        version: '1.8.8',
+        // LIGHTWEIGHT MODE: Disables heavy calculations to bypass lag-kicks
+        checkTimeoutInterval: 60000,
+        physicsEnabled: false 
     });
 
-    bot.on('message', (jsonMsg) => {
-        const msg = jsonMsg.toString().toLowerCase();
-        if (msg.includes("/register")) bot.chat(`/register ${CONFIG.password} ${CONFIG.password}`);
-        if (msg.includes("/login")) bot.chat(`/login ${CONFIG.password}`);
+    // High-speed event binding
+    bot.on('message', (json) => {
+        const m = json.toString();
+        if (m.includes('/register')) bot.chat(`/register ${CONFIG.password} ${CONFIG.password}`);
+        else if (m.includes('/login')) bot.chat(`/login ${CONFIG.password}`);
     });
 
-    bot.on('spawn', () => {
-        console.log(`>>> ${name} IS IN.`);
-        activeBots.add(name);
+    bot.once('spawn', () => {
+        console.log(`[+] ${name} STABILIZED.`);
         
-        // Anti-AFK Jump
+        // Rapid Spam Loop
         setInterval(() => {
-            if (bot.entity) {
-                bot.setControlState('jump', true);
-                setTimeout(() => { if (bot.entity) bot.setControlState('jump', false); }, 500);
-            }
-        }, 15000);
-
-        // Individual Chat Loop
-        setInterval(() => {
-            if (bot.entity && activeBots.has(name)) {
-                bot.chat(randomStr(8));
-            }
+            if (bot.entity) bot.chat(Math.random().toString(36).substring(2, 10).toUpperCase());
         }, CONFIG.spamInterval);
     });
 
+    // THE BYPASS: If kicked by Limbo/Analyzing, rejoin instantly with the SAME name
     bot.on('kicked', (reason) => {
-        const kickMsg = reason.toString();
-        console.log(`[!] ${name} kicked.`);
-
-        // THE BYPASS: If the server is "analyzing", rejoin IMMEDIATELY with the same name
-        if (kickMsg.includes("analyzing") || kickMsg.includes("immediately")) {
-            console.log(`[Bypass] Rejoining ${name} for verification...`);
-            setTimeout(() => createBot(id, name), 1000); 
+        if (reason.includes("analyzing") || reason.includes("immediately")) {
+            setTimeout(() => createBot(id), 500); 
         } else {
-            activeBots.delete(name);
-            // If it's a normal kick, wait a bit before starting a new bot slot
-            setTimeout(() => createBot(id), 45000);
+            // If it's an IP-limit kick, wait 30s and try a new name
+            setTimeout(() => createBot(id), 30000);
         }
     });
 
     bot.on('error', () => {});
 }
 
-function startQueue(currentId) {
-    if (currentId >= CONFIG.botCount) return;
-    createBot(currentId);
-    const nextDelay = Math.floor(Math.random() * (CONFIG.maxJoinDelay - CONFIG.minJoinDelay + 1)) + CONFIG.minJoinDelay;
-    console.log(`[Queue] Bot #${currentId + 2} scheduled in ${Math.round(nextDelay/1000)}s.`);
-    setTimeout(() => startQueue(currentId + 1), nextDelay);
+// THE STAMPEDE: Firing bots in a tight sequence
+console.log("Launching Overdrive Sequence...");
+for (let i = 0; i < CONFIG.botCount; i++) {
+    setTimeout(() => createBot(i), i * CONFIG.joinDelay);
 }
-
-startQueue(0);
