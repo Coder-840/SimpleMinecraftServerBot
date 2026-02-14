@@ -7,7 +7,6 @@ const CONFIG = {
     port: 25565,
     botCount: 10,
     password: 'SafeBot123!',
-    // API to get fresh SOCKS5 proxies automatically
     proxyApi: 'https://api.proxyscrape.com',
     joinDelay: 8000, 
     verifyDelay: 6000
@@ -17,17 +16,20 @@ let scrapedProxies = [];
 
 async function refreshProxies() {
     try {
-        console.log("Warping IPs... Fetching fresh proxy list.");
+        console.log("Fetching fresh 'Warp' points...");
         const res = await axios.get(CONFIG.proxyApi);
-        scrapedProxies = res.data.trim().split('\n').map(p => p.trim());
-        console.log(`Successfully scraped ${scrapedProxies.length} proxies.`);
+        scrapedProxies = res.data.trim().split('\n').map(p => p.trim()).filter(p => p.includes(':'));
+        console.log(`Scraped ${scrapedProxies.length} proxies.`);
     } catch (e) {
-        console.log("Error: Could not reach the proxy API.");
+        console.log("Failed to fetch proxies. Check your internet.");
     }
 }
 
 function createBot(id, botName = null) {
-    if (scrapedProxies.length === 0) return;
+    if (scrapedProxies.length === 0) {
+        console.log("No proxies available. Retrying fetch...");
+        return setTimeout(() => createBot(id, botName), 10000);
+    }
 
     const name = botName || `WARP_${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
     const proxyStr = scrapedProxies[Math.floor(Math.random() * scrapedProxies.length)];
@@ -42,11 +44,12 @@ function createBot(id, botName = null) {
             SocksClient.createConnection({
                 proxy: { host: pHost, port: parseInt(pPort), type: 5 },
                 command: 'connect',
-                destination: { host: CONFIG.host, port: CONFIG.port }
+                destination: { host: CONFIG.host, port: CONFIG.port },
+                timeout: 10000 // Stop hanging on slow proxies
             }, (err, info) => {
                 if (err) {
-                    // If a proxy fails (common with free ones), just pick another and try again
-                    return createBot(id, botName); 
+                    // FIX: Wait 2 seconds before retrying to prevent stack overflow
+                    return setTimeout(() => createBot(id, botName), 2000); 
                 }
                 client.setSocket(info.socket);
                 client.emit('connect');
@@ -61,7 +64,7 @@ function createBot(id, botName = null) {
     });
 
     bot.once('spawn', () => {
-        console.log(`>>> ${name} PASSED SHIELD VIA WARP.`);
+        console.log(`>>> ${name} PASSED SHIELD.`);
         setInterval(() => {
             if (bot.entity) bot.chat(Math.random().toString(36).substring(2, 8).toUpperCase());
         }, 8000);
@@ -73,14 +76,18 @@ function createBot(id, botName = null) {
             console.log(`[Shield] ${name} verifying...`);
             setTimeout(() => createBot(id, name), CONFIG.verifyDelay);
         } else {
-            setTimeout(() => createBot(id), 30000);
+            console.log(`[Kicked] ${name}. Re-warping in 15s...`);
+            setTimeout(() => createBot(id), 15000);
         }
     });
 
-    bot.on('error', () => {});
+    // Handle errors so the bot doesn't just die
+    bot.on('error', (err) => {
+        bot.end();
+        setTimeout(() => createBot(id, botName), 5000);
+    });
 }
 
-// Start sequence: Scrape first, then deploy
 refreshProxies().then(() => {
     for (let i = 0; i < CONFIG.botCount; i++) {
         setTimeout(() => createBot(i), i * CONFIG.joinDelay);
