@@ -7,11 +7,9 @@ const CONFIG = {
     port: 25565,
     botCount: 10,
     password: 'SafeBot123!',
-    joinDelay: 15000, 
-    // Reliability sources (GitHub raw files are rarely blocked)
+    joinDelay: 25000, // Slower joins = less suspicious
     sources: [
-        'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/refs/heads/master/socks5.txt',
-        'https://api.proxyscrape.com'
+        'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/refs/heads/master/socks5.txt'
     ]
 };
 
@@ -19,86 +17,64 @@ let proxyList = [];
 let currentProxyIdx = 0;
 
 async function refreshProxies() {
-    console.log("[System] Gathering SOCKS5 proxies from multiple sources...");
+    console.log("[System] Gathering SOCKS5 proxies...");
     for (const url of CONFIG.sources) {
         try {
             const response = await axios.get(url, { timeout: 5000 });
-            const lines = response.data.trim().split(/\r?\n/);
-            const parsed = lines.filter(p => p.includes(':')).map(p => {
+            const parsed = response.data.trim().split(/\r?\n/).filter(p => p.includes(':')).map(p => {
                 const [host, port] = p.split(':');
                 return { host, port: parseInt(port) };
             });
             proxyList = [...proxyList, ...parsed];
-            console.log(`[Source] Loaded ${parsed.length} from ${new URL(url).hostname}`);
-        } catch (err) {
-            console.log(`[Source] Failed to load from ${new URL(url).hostname}`);
-        }
+        } catch (e) {}
     }
-    
-    // Shuffle the list so everyone isn't using the same "first" proxy
     proxyList = proxyList.sort(() => Math.random() - 0.5);
-    console.log(`[System] Total usable proxy candidates: ${proxyList.length}`);
+    console.log(`[System] ${proxyList.length} proxies loaded.`);
 }
 
 function createBot(id, botName = null) {
-    if (proxyList.length === 0) return setTimeout(() => createBot(id, botName), 5000);
+    if (proxyList.length === 0) return;
 
     const name = botName || `USER_${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
-    
-    // Keep 2 bots direct, others use proxies
-    const useProxy = id >= 2;
-    const proxy = useProxy ? proxyList[currentProxyIdx++ % proxyList.length] : null;
+    const proxy = proxyList[currentProxyIdx++ % proxyList.length];
 
-    console.log(`[Slot ${id + 1}] ${name} -> ${useProxy ? 'Proxy: ' + proxy.host : 'DIRECT'}`);
+    console.log(`[Slot ${id + 1}] Testing ${proxy.host}...`);
 
-    const botOptions = {
+    const bot = mineflayer.createBot({
         host: CONFIG.host,
         port: CONFIG.port,
         username: name,
         version: '1.8.8',
-        fakeHost: CONFIG.host,
-        physicsEnabled: false
-    };
-
-    if (useProxy && proxy) {
-        botOptions.connect = (client) => {
+        // Stealth settings
+        fakeHost: CONFIG.host, 
+        viewDistance: 'tiny',
+        connect: (client) => {
             Socks.createConnection({
                 proxy: { host: proxy.host, port: proxy.port, type: 5 },
                 command: 'connect',
-                timeout: 7000, 
+                timeout: 10000, // More time for TCPShield handshake
                 destination: { host: CONFIG.host, port: CONFIG.port }
             }, (err, info) => {
-                if (err) {
-                    // Try next proxy immediately
-                    return createBot(id, name);
-                }
+                if (err) return createBot(id, name); // Try next proxy
                 client.setSocket(info.socket);
                 client.emit('connect');
             });
-        };
-    }
-
-    const bot = mineflayer.createBot(botOptions);
-
-    bot.on('message', (json) => {
-        const m = json.toString();
-        if (m.includes('/register')) bot.chat(`/register ${CONFIG.password} ${CONFIG.password}`);
-        if (m.includes('/login')) bot.chat(`/login ${CONFIG.password}`);
+        }
     });
 
     bot.once('spawn', () => {
-        console.log(`>>> SUCCESS: ${name} IS IN.`);
-        setInterval(() => { if (bot.entity) bot.chat(Math.random().toString(36).substring(7)); }, 10000);
+        console.log(`>>> SUCCESS: ${name} IS IN!`);
+        // Move slightly to prove we aren't a static bot
+        setInterval(() => { if (bot.entity) bot.setControlState('forward', true); setTimeout(() => bot.setControlState('forward', false), 500); }, 30000);
     });
 
     bot.on('kicked', (reason) => {
         const r = reason.toString();
-        console.log(`[Kicked] ${name}: ${r.substring(0, 50)}...`);
-        // If we get the 'suspicious' kick, it means that proxy is burnt. Retry with new one.
+        // If we hit the captcha wall, ditch this proxy immediately
         if (r.includes("suspicious") || r.includes("notbot")) {
-             return createBot(id);
+             return createBot(id); 
         }
-        setTimeout(() => createBot(id), 30000);
+        setTimeout(() => createBot(id), 45000);
     });
 
     bot.on('error', () => {});
@@ -106,10 +82,6 @@ function createBot(id, botName = null) {
 
 async function main() {
     await refreshProxies();
-    if (proxyList.length === 0) {
-        console.log("FATAL: Could not load any proxies. Check your internet connection.");
-        return;
-    }
     for (let i = 0; i < CONFIG.botCount; i++) {
         createBot(i);
         await new Promise(r => setTimeout(r, CONFIG.joinDelay));
