@@ -5,27 +5,32 @@ const CONFIG = {
     host: 'noBnoT.org',
     port: 25565,
     botCount: 10,
-    password: 'SafeBot123',
+    password: 'SafeBot123!',
     joinDelay: 45000, 
     verifyDelay: 8000,
     spamInterval: 2500,
-    // Add your SOCKS5 proxies here. Format: { host, port }
-    // You need at least 3 proxies to run 10 bots (4 accounts per IP).
+    // Filtered SOCKS5 Candidates
     proxies: [
-        { host: '94.130.177.190', port: 9999 },
-        { host: '201.68.215.79', port: 61221 },
-        { host: '110.235.248.142', port: 1080 }
+        { host: '110.235.248.142', port: 1080 },
+        { host: '202.62.59.218', port: 1080 },
+        { host: '136.228.163.150', port: 5678 },
+        { host: '31.42.2.113', port: 5678 },
+        { host: '8.211.195.173', port: 1080 },
+        { host: '195.133.41.113', port: 1080 },
+        { host: '144.124.253.249', port: 1080 },
+        { host: '202.55.175.237', port: 1080 },
+        { host: '197.234.13.27', port: 4145 },
+        { host: '199.229.254.129', port: 4145 }
     ]
 };
 
 function createBot(id, botName = null) {
-    const name = botName || `User_${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
+    const name = botName || `USER_${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
     
-    // Select proxy based on bot ID (4 bots per proxy)
-    const proxyIndex = Math.floor(id / 4);
-    const proxy = CONFIG.proxies[proxyIndex];
+    // Rotate through proxies (1 proxy per bot to maximize reliability)
+    const proxy = CONFIG.proxies[id % CONFIG.proxies.length];
 
-    console.log(`[Slot ${id + 1}] Connecting ${name} via ${proxy ? proxy.host : 'DIRECT'}...`);
+    console.log(`[Slot ${id + 1}] Connecting ${name} via ${proxy.host}:${proxy.port}...`);
 
     const botOptions = {
         host: CONFIG.host,
@@ -33,36 +38,34 @@ function createBot(id, botName = null) {
         username: name,
         version: '1.8.8',
         physicsEnabled: false,
-        fakeHost: CONFIG.host // Helps bypass some handshake filters
-    };
-
-    // If a proxy exists, override the connection logic
-    if (proxy) {
-        botOptions.connect = (client) => {
+        fakeHost: CONFIG.host,
+        connect: (client) => {
             Socks.createConnection({
                 proxy: {
                     host: proxy.host,
                     port: proxy.port,
-                    type: 5 // SOCKS5 is required for Minecraft
+                    type: 5 
                 },
                 command: 'connect',
+                timeout: 15000, // Longer timeout for public proxies
                 destination: {
                     host: CONFIG.host,
                     port: CONFIG.port
                 }
             }, (err, info) => {
                 if (err) {
-                    console.log(`[Proxy Error] ${name} failed: ${err.message}`);
+                    console.log(`[Proxy Error] ${name} (${proxy.host}) failed: ${err.message}`);
                     return;
                 }
                 client.setSocket(info.socket);
                 client.emit('connect');
             });
-        };
-    }
+        }
+    };
 
     const bot = mineflayer.createBot(botOptions);
 
+    // --- Logic Handlers ---
     bot.on('message', (json) => {
         const m = json.toString().toLowerCase();
         if (m.includes('/register')) bot.chat(`/register ${CONFIG.password} ${CONFIG.password}`);
@@ -70,34 +73,21 @@ function createBot(id, botName = null) {
     });
 
     bot.once('spawn', () => {
-        console.log(`>>> ${name} IS IN THE SYSTEM.`);
-        
+        console.log(`>>> ${name} IS IN.`);
         setInterval(() => {
-            if (bot.entity) {
-                const hex = Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase();
-                bot.chat(hex);
-            }
+            if (bot.entity) bot.chat(Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase());
         }, CONFIG.spamInterval);
-
-        setInterval(() => {
-            if (bot.entity) bot.setControlState('jump', true);
-            setTimeout(() => { if (bot.entity) bot.setControlState('jump', false); }, 500);
-        }, 20000);
     });
 
     bot.on('kicked', (reason) => {
-        const msg = reason.toString();
-        if (msg.includes("verified") || msg.includes("re-connect")) {
-            setTimeout(() => createBot(id, name), CONFIG.verifyDelay);
-        } else {
-            console.log(`[Kicked] ${name}. Cooling down 2 mins...`);
-            setTimeout(() => createBot(id), 120000);
-        }
+        console.log(`[Kicked] ${name}: ${reason}`);
+        setTimeout(() => createBot(id), 60000); // 1-minute retry
     });
 
-    bot.on('error', (err) => console.log(`[Error] ${name}: ${err.message}`));
+    bot.on('error', (err) => {});
 }
 
+// Start sequence
 console.log("Starting Proxy-Cram sequence...");
 for (let i = 0; i < CONFIG.botCount; i++) {
     setTimeout(() => createBot(i), i * CONFIG.joinDelay);
