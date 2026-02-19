@@ -1,12 +1,11 @@
 {
-  "name": "eagler-bot-trio",
+  "name": "bot-trio",
   "version": "1.0.0",
   "main": "index.js",
-  "dependencies": {
-    "mineflayer": "^4.20.0",
-    "mineflayer-eaglercraft": "git+https://github.com"
-  },
   "scripts": {
     "start": "node index.js"
+  },
+  "dependencies": {
+    "mineflayer": "^4.20.1"
   }
 }
