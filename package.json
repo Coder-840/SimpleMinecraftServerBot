@@ -4,7 +4,7 @@
   "main": "index.js",
   "dependencies": {
     "mineflayer": "^4.20.0",
-    "mineflayer-eaglercraft": "github:RE-Eagler/mineflayer-eaglercraft"
+    "mineflayer-eaglercraft": "git+https://github.com"
   },
   "scripts": {
     "start": "node index.js"
