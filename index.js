@@ -1,7 +1,7 @@
 const mineflayer = require("mineflayer")
 
 // ===== CONFIG =====
-const HOST = "your.server.ip"
+const HOST = "noBnoT.org"
 const PORT = 25565
 const VERSION = "1.12.2"
 const MESSAGE = "Hello from bot!"
