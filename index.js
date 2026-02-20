@@ -6,7 +6,9 @@ const PORT = 25565
 const VERSION = "1.12.2"
 const MESSAGE = "Hello from bot!"
 const PASSWORD = "botpass"
-const DELAY = 15000
+const DELAY = 30000 // wait 30s before restarting
+const BOT_COUNT = 3
+const JOIN_STAGGER = 5000 // 5s between bot joins
 // ==================
 
 function randomName() {
@@ -18,7 +20,6 @@ function randomName() {
 
 function startBot(id) {
   const username = randomName()
-
   const bot = mineflayer.createBot({
     host: HOST,
     port: PORT,
@@ -31,25 +32,30 @@ function startBot(id) {
   let registered = false
   let loggedIn = false
 
-  // Once bot spawns, try /register (if server needs it)
-  bot.once("spawn", () => {
-    console.log(`Bot ${id} spawned`)
-    setTimeout(() => bot.chat(`/register ${PASSWORD} ${PASSWORD}`), 2000)
-    setTimeout(() => bot.chat(`/login ${PASSWORD}`), 4000)
+  // Wait for server login packet
+  bot.once("login", () => {
+    console.log(`Bot ${id} connected, waiting for registration/login readiness...`)
+
+    // Delay a bit to ensure server is ready for commands
+    setTimeout(() => {
+      bot.chat(`/register ${PASSWORD} ${PASSWORD}`)
+      bot.chat(`/login ${PASSWORD}`)
+    }, 2000)
   })
 
-  // Listen for chat messages to detect successful login/register
+  // Listen for messages to detect successful login or registration
   bot.on("message", (msg) => {
-    const text = msg.toString()
-    if (!registered && text.toLowerCase().includes("successfully registered")) {
+    const text = msg.toString().toLowerCase()
+    if (!registered && text.includes("successfully registered")) {
       registered = true
       console.log(`Bot ${id} registered successfully`)
     }
-    if (!loggedIn && (text.toLowerCase().includes("logged in") || text.toLowerCase().includes("welcome"))) {
+    if (!loggedIn && (text.includes("welcome") || text.includes("logged in"))) {
       loggedIn = true
       console.log(`Bot ${id} logged in successfully`)
-      // Chat the message and quit shortly after
       bot.chat(MESSAGE)
+
+      // Disconnect a few seconds after chatting
       setTimeout(() => bot.quit(), 4000)
     }
   })
@@ -64,5 +70,7 @@ function startBot(id) {
   })
 }
 
-// launch exactly 3 bots
-for (let i = 1; i <= 3; i++) startBot(i)
+// Stagger bot joins to avoid server spam
+for (let i = 1; i <= BOT_COUNT; i++) {
+  setTimeout(() => startBot(i), (i - 1) * JOIN_STAGGER)
+}
