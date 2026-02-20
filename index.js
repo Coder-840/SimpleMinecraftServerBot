@@ -1,4 +1,4 @@
-import mineflayer from 'mineflayer';
+const mineflayer = require('mineflayer');
 
 const SERVER = {
   host: 'noBnoT.org',
@@ -6,68 +6,55 @@ const SERVER = {
   version: false
 };
 
-const PASSWORD = 'Password123'; // for /register and /login
-const MAX_BOTS = 3;
+const PASSWORD = 'YourSecurePassword123';
+let musketsActive = true;
+let musketBots = [];
 
-let activeBots = [];
-
-// Random bot name
+// Generate a random bot name
 function randomName() {
   return 'Bot' + Math.floor(Math.random() * 10000);
 }
 
-// Spawn a single bot
-function spawnBot() {
-  const name = randomName();
+function createMusket() {
+  const username = randomName();
   const bot = mineflayer.createBot({
     host: SERVER.host,
     port: SERVER.port,
-    username: name,
+    username: username,
     version: SERVER.version
   });
 
-  activeBots.push(bot);
+  musketBots.push(bot);
 
+  // ===== AUTO REGISTER / LOGIN =====
+  bot.on('messagestr', message => {
+    if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+    if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
+  });
+
+  // ===== SAY HELLO =====
   bot.once('spawn', () => {
-    console.log(`${name} spawned.`);
-
-    // ===== AUTO REGISTER / LOGIN =====
-    bot.on('messagestr', message => {
-      if (message.includes('/register')) {
-        bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-      } else if (message.includes('/login')) {
-        bot.chat(`/login ${PASSWORD}`);
-      }
-    });
-
-    // Wait a bit then say hello
     setTimeout(() => {
       bot.chat('Hello!');
-      setTimeout(() => bot.quit('Goodbye!'), 3000 + Math.random() * 2000);
     }, 2000 + Math.random() * 2000);
   });
 
-  // ===== RECONNECT / RESPAWN LOGIC =====
+  // ===== HANDLE DISCONNECT / KICK =====
   function cleanup() {
-    console.log(`${name} left.`);
-    activeBots = activeBots.filter(b => b !== bot);
-    maintainBots();
+    console.log(`${username} left.`);
+    musketBots = musketBots.filter(b => b !== bot);
+    if (musketsActive) setTimeout(createMusket, 5000); // respawn with new random name
   }
 
   bot.on('end', cleanup);
   bot.on('kicked', cleanup);
   bot.on('error', err => {
-    console.log(`${name} error: ${err.message}`);
+    console.log(`${username} error: ${err.message}`);
     cleanup();
   });
 }
 
-// Keep 3 bots active at all times
-function maintainBots() {
-  while (activeBots.length < MAX_BOTS) {
-    spawnBot();
-  }
+// ===== START 3 MUSKETEERS =====
+for (let i = 0; i < 3; i++) {
+  createMusket();
 }
-
-// Start the musketeers system
-maintainBots();
