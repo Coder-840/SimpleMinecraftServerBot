@@ -1,13 +1,11 @@
 {
   "name": "musketeer-bots",
   "version": "1.0.0",
-  "type": "commonjs",
+  "main": "index.cjs",
   "scripts": {
     "start": "node index.cjs"
   },
   "dependencies": {
-    "mineflayer": "^4.32.0",
-    "mineflayer-pvp": "1.3.2",
-    "mineflayer-pathfinder": "^1.8.4"
+    "mineflayer": "^4.20.0"
   }
 }
