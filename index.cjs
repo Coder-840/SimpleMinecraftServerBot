@@ -1,65 +1,73 @@
-const mineflayer = require('mineflayer')
+const mineflayer = require("mineflayer")
 
 const HOST = "noBnoT.org"
 const PORT = 25565
-const PASSWORD = "yourpassword"
-const WORDS = ["Hello", "Hi", "Hey", "Yo", "Sup"]
-
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms))
-}
+const PASSWORD = "BotPass123"
+const WORD = "Hello"
 
 function randomName() {
   return "Bot" + Math.floor(Math.random() * 10000)
 }
 
-function randomWord() {
-  return WORDS[Math.floor(Math.random() * WORDS.length)]
+function wait(ms) {
+  return new Promise(r => setTimeout(r, ms))
 }
 
 async function runBot() {
-  const name = randomName()
+  const username = randomName()
+  console.log("Creating bot:", username)
 
   const bot = mineflayer.createBot({
     host: HOST,
     port: PORT,
-    username: name
+    username
   })
 
-  bot.once("spawn", async () => {
-    try {
-      await sleep(1000)
+  bot.on("spawn", async () => {
+    console.log(username, "spawned")
 
-      // Try register
-      bot.chat(`/register ${PASSWORD} ${PASSWORD}`)
+    await wait(1000)
 
-      await sleep(1500)
+    // login/register detection
+    bot.once("messagestr", async msg => {
+      console.log(username, "server:", msg)
 
-      // Try login (in case already registered)
-      bot.chat(`/login ${PASSWORD}`)
+      if (msg.includes("/register")) {
+        console.log(username, "registering")
+        bot.chat(`/register ${PASSWORD} ${PASSWORD}`)
+      }
+      if (msg.includes("/login")) {
+        console.log(username, "logging in")
+        bot.chat(`/login ${PASSWORD}`)
+      }
+    })
 
-      await sleep(2500)
+    await wait(3000)
 
-      // Say word
-      bot.chat(randomWord())
+    console.log(username, "saying word")
+    bot.chat(WORD)
 
-      await sleep(1000)
+    await wait(1500)
 
-      bot.quit()
-    } catch (err) {
-      bot.quit()
-    }
+    console.log(username, "leaving")
+    bot.quit()
   })
 
-  bot.on("kicked", () => {})
-  bot.on("error", () => {})
+  bot.on("end", () => {
+    console.log(username, "ended")
+  })
+
+  bot.on("error", err => {
+    console.log(username, "error:", err.message)
+  })
 }
 
 async function loop() {
   while (true) {
     await runBot()
-    await sleep(4000) // wait before next bot joins
+    await wait(4000)
   }
 }
 
+console.log("Starting musketeer system...")
 loop()
