@@ -20,27 +20,28 @@ async function runBot() {
   const bot = mineflayer.createBot({
     host: HOST,
     port: PORT,
-    username
+    username,
+    auth: "offline",
+    version: false
   })
 
-  bot.on("spawn", async () => {
+  // 🔥 LOGIN DETECTION MUST BE HERE (not in spawn)
+  bot.on("messagestr", msg => {
+    console.log(username, "server:", msg)
+
+    if (msg.toLowerCase().includes("/register")) {
+      console.log(username, "registering")
+      bot.chat(`/register ${PASSWORD} ${PASSWORD}`)
+    }
+
+    if (msg.toLowerCase().includes("/login")) {
+      console.log(username, "logging in")
+      bot.chat(`/login ${PASSWORD}`)
+    }
+  })
+
+  bot.once("spawn", async () => {
     console.log(username, "spawned")
-
-    await wait(1000)
-
-    // login/register detection
-    bot.once("messagestr", async msg => {
-      console.log(username, "server:", msg)
-
-      if (msg.includes("/register")) {
-        console.log(username, "registering")
-        bot.chat(`/register ${PASSWORD} ${PASSWORD}`)
-      }
-      if (msg.includes("/login")) {
-        console.log(username, "logging in")
-        bot.chat(`/login ${PASSWORD}`)
-      }
-    })
 
     await wait(3000)
 
@@ -55,6 +56,10 @@ async function runBot() {
 
   bot.on("end", () => {
     console.log(username, "ended")
+  })
+
+  bot.on("kicked", r => {
+    console.log(username, "kicked:", r)
   })
 
   bot.on("error", err => {
