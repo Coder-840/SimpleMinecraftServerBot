@@ -6,12 +6,12 @@ const SERVER = {
   version: false
 };
 
-const PASSWORD = 'Password123'; // password for /register or /login
+const PASSWORD = 'Password123'; // for /register and /login
 const MAX_BOTS = 3;
 
 let activeBots = [];
 
-// Generate random bot name
+// Random bot name
 function randomName() {
   return 'Bot' + Math.floor(Math.random() * 10000);
 }
@@ -28,56 +28,46 @@ function spawnBot() {
 
   activeBots.push(bot);
 
-  let loggedIn = false;
-
   bot.once('spawn', () => {
     console.log(`${name} spawned.`);
 
-    // Listen for server messages to detect registration/login prompts
+    // ===== AUTO REGISTER / LOGIN =====
     bot.on('messagestr', message => {
-      const msg = message.toLowerCase();
-
-      // Only send register/login if not already logged in
-      if (!loggedIn) {
-        if (msg.includes('/register')) {
-          console.log(`${name} registering...`);
-          bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-        } else if (msg.includes('/login')) {
-          console.log(`${name} logging in...`);
-          bot.chat(`/login ${PASSWORD}`);
-        } else if (msg.includes('welcome') || msg.includes('joined')) {
-          // Mark bot as fully logged in once server confirms join
-          loggedIn = true;
-
-          // Say Hello and leave shortly after
-          setTimeout(() => {
-            bot.chat('Hello!');
-            setTimeout(() => bot.quit('Goodbye!'), 3000 + Math.random() * 2000);
-          }, 2000);
-        }
+      if (message.includes('/register')) {
+        bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+      } else if (message.includes('/login')) {
+        bot.chat(`/login ${PASSWORD}`);
       }
     });
+
+    // Wait a bit then say hello
+    setTimeout(() => {
+      bot.chat('Hello!');
+      setTimeout(() => bot.quit('Goodbye!'), 3000 + Math.random() * 2000);
+    }, 2000 + Math.random() * 2000);
   });
 
-  bot.on('end', () => {
+  // ===== RECONNECT / RESPAWN LOGIC =====
+  function cleanup() {
     console.log(`${name} left.`);
     activeBots = activeBots.filter(b => b !== bot);
     maintainBots();
-  });
+  }
 
+  bot.on('end', cleanup);
+  bot.on('kicked', cleanup);
   bot.on('error', err => {
-    console.log(`${name} error:`, err.message);
-    activeBots = activeBots.filter(b => b !== bot);
-    maintainBots();
+    console.log(`${name} error: ${err.message}`);
+    cleanup();
   });
 }
 
-// Ensure we always have MAX_BOTS bots
+// Keep 3 bots active at all times
 function maintainBots() {
   while (activeBots.length < MAX_BOTS) {
     spawnBot();
   }
 }
 
-// Start the system
+// Start the musketeers system
 maintainBots();
